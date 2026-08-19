@@ -1,8 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 
 
 a = Analysis(
-    ['D:/Users/Administrator/Desktop/PS插件开发/psd-font-reporter/font_helper_main.py'],
+    [os.path.join(SPECPATH, 'font_helper_main.py')],
     pathex=[],
     binaries=[],
     datas=[],

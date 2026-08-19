@@ -9,7 +9,7 @@ Blender STL 六视图渲染与图集合并 Extension。
 本 ZIP 按 Blender Extensions 格式打包：
 
 ```text
-STL_Six_Views_Renderer_v1.4_Extension.zip
+Blender-STL-Six-Views-Renderer.zip
 ├── __init__.py
 ├── blender_manifest.toml
 └── README.md
@@ -79,7 +79,7 @@ Back  | Right | Bottom
 3. 打开 Extensions / Add-ons 管理界面。
 4. 选择 `Install from Disk`。
 5. 直接选择本 ZIP：
-   `STL_Six_Views_Renderer_v1.4_Extension.zip`
+   `Blender-STL-Six-Views-Renderer.zip`
 6. 启用 `STL Six Views Renderer`。
 7. 回到 3D View。
 8. 按 `N` 打开右侧栏。

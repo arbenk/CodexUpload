@@ -12,7 +12,6 @@
 | STL Six Views Renderer | 在 Blender 中为单个或批量 STL 渲染前、后、左、右、顶、底六视图，并可合并生成图集。 |
 | Drop to Ground & Align | 在 Blender 中将物体放置到地面，并提供外贴合、内码齐、轴对齐和分散对齐工具。 |
 | FlatFab Plate Flatten | 面向 Blender 板材设计，提供板厚实体化、参数化插口与刀线、板件展平排版，以及 SVG/DXF/PDF 和 UV 工作流。 |
-| 长图浏览器 | 用于浏览和查看长图文件的独立 Windows 工具。 |
 
 ## 下载
 
@@ -21,3 +20,5 @@
 ## 说明
 
 仓库保存各项目的源码和配置；可再生成的构建目录、缓存以及发布成品不进入 Git 历史，发布成品统一作为 GitHub Release 附件提供。
+
+新项目、目录和发布文件遵循 [项目命名规范](PROJECT_NAMING.md)。

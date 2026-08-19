@@ -43,7 +43,7 @@ Blender 4.2 Extension 安装方法
 3. 点击右上角菜单。
 4. 选择 “Install from Disk / 从磁盘安装”。
 5. 选择整个 ZIP：
-   drop_ground_align_tools_v1_7_blender_4_2_extension.zip
+   Blender-Drop-Ground-Align.zip
 6. 安装并启用。
 7. 3D 视图按 N，进入“工具”标签。
 8. 找到“放置 & 对齐”。

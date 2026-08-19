@@ -4,7 +4,7 @@
 
 ## 安装
 
-推荐方式：彻底退出 Photoshop，运行 `FontNavigator-Setup-1.2.3.exe`，按安装向导完成安装。安装器会在 Windows 卸载列表和开始菜单中登记“卸载字体导航”。
+推荐方式：彻底退出 Photoshop，运行 `Photoshop-FontNavigator.exe`，按安装向导完成安装。安装器会在 Windows 卸载列表和开始菜单中登记“卸载字体导航”。
 
 脚本方式：
 

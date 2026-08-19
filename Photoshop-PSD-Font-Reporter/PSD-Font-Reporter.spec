@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from PyInstaller.utils.hooks import collect_all
 
 datas = []
@@ -9,7 +10,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['D:/Users/Administrator/Desktop/PS插件开发/psd-font-reporter/main.py'],
+    [os.path.join(SPECPATH, 'main.py')],
     pathex=[],
     binaries=binaries,
     datas=datas,
