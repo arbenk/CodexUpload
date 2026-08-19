@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.local.fontnavigator.cep" ExtensionBundleVersion="1.2.3" ExtensionBundleName="字体导航与批量替换">
+  <ExtensionList>
+    <Extension Id="com.local.fontnavigator.cep.panel" Version="1.2.3" />
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList><Host Name="PHXS" Version="[21.0,24.0)" /></HostList>
+    <LocaleList><Locale Code="All" /></LocaleList>
+    <RequiredRuntimeList><RequiredRuntime Name="CSXS" Version="9.0" /></RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="com.local.fontnavigator.cep.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./index.html</MainPath>
+          <ScriptPath>./jsx/host.jsx</ScriptPath>
+          <CEFCommandLine>
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle><AutoVisible>true</AutoVisible></Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>字体导航</Menu>
+          <Geometry>
+            <Size><Height>560</Height><Width>320</Width></Size>
+            <MinSize><Height>420</Height><Width>280</Width></MinSize>
+            <MaxSize><Height>1600</Height><Width>1200</Width></MaxSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

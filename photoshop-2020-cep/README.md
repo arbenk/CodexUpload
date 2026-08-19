@@ -1,0 +1,32 @@
+# 字体导航与批量替换（Photoshop 2020 CEP 版）
+
+本版本面向 Windows Photoshop 2020–2022（21.x–23.x），不依赖 Creative Cloud 或 UXP Developer Tool。
+
+## 安装
+
+推荐方式：彻底退出 Photoshop，运行 `FontNavigator-Setup-1.2.3.exe`，按安装向导完成安装。安装器会在 Windows 卸载列表和开始菜单中登记“卸载字体导航”。
+
+脚本方式：
+
+1. 彻底退出 Photoshop。
+2. 使用 PowerShell 运行 `install.ps1`。
+3. 重新打开 Photoshop 2020、2021 或 2022。
+4. 从“窗口 > 扩展功能(旧版) > 字体导航”打开面板。
+
+安装脚本会把扩展复制到当前用户的 `%APPDATA%\Adobe\CEP\extensions\com.local.fontnavigator.cep`，并为 CSXS 9/10/11 开启未签名扩展调试模式。重复运行脚本可覆盖升级现有版本。
+
+## 卸载
+
+退出 Photoshop 后运行 `uninstall.ps1`，再重新打开 Photoshop。
+
+## 功能
+
+- 扫描文档内全部文字图层，包括组内图层和混合字体区间。
+- 字体列表主行显示“可读字体族名称 + 字重/样式”，名称优先级为简体中文、繁体中文、英文，三者均缺失时使用 Photoshop 提供的名称；下方保留 PostScript 字体名称。
+- 目标字体下拉框按中文字体、英文字体、其他名称的顺序排列。
+- 目标字体使用可搜索组合框，支持输入筛选、下拉浏览、方向键和回车选择。
+- 按字体循环定位文字图层。
+- 把匹配字体的文字区间批量替换为已安装字体。
+- 一次批量替换合并为一条 Photoshop 历史记录。
+
+在正式文件上操作前请先保存文档。首次实际运行建议使用测试 PSD 验证混合字体替换行为。

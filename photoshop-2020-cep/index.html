@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header><h1>字体导航</h1><button id="refreshButton" class="secondary">刷新</button></header>
+    <section>
+      <div class="section-title"><span>当前文档字体</span><span id="fontCount" class="badge">0</span></div>
+      <div id="fontList" class="font-list"></div>
+    </section>
+    <section class="navigator">
+      <div class="button-row"><button id="previousButton" disabled>上一处</button><button id="nextButton" disabled>下一处</button></div>
+      <div class="view-options">
+        <label class="follow-view"><input id="followView" type="checkbox" checked><span>跟随查看</span></label>
+        <label class="zoom-toggle"><input id="customZoom" type="checkbox"><span>缩放</span></label>
+        <label class="zoom-control"><input id="followZoom" type="number" min="1" max="3200" step="1" value="100"><span>%</span></label>
+      </div>
+    </section>
+    <section class="replace-box">
+      <label for="targetFont">替换为</label>
+      <div id="fontCombobox" class="font-combobox">
+        <input id="targetFont" type="text" autocomplete="off" placeholder="正在读取已安装字体…" disabled>
+        <button id="fontDropdownButton" type="button" aria-label="展开字体列表" disabled>▾</button>
+        <div id="fontDropdown" class="font-dropdown" hidden></div>
+      </div>
+      <button id="replaceButton" class="danger" disabled>批量替换所选字体</button>
+      <p class="hint">混合字体图层只替换匹配的文字区间。</p>
+    </section>
+    <p id="status" class="status" aria-live="polite">打开一个文档，然后点击“刷新”。</p>
+  </main>
+  <script src="js/font-localizer.js"></script>
+  <script src="js/panel.js"></script>
+</body>
+</html>

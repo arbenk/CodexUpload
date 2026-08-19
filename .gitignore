@@ -1,0 +1,39 @@
+# Generated release artifacts (published through GitHub Releases)
+/dist/
+
+# Generated application bundles
+**/build/
+**/package/
+
+# Python caches and environments
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# JavaScript dependencies and build caches
+**/node_modules/
+**/.cache/
+**/.parcel-cache/
+**/.next/
+
+# Test and coverage outputs
+.coverage
+coverage/
+htmlcov/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and local secrets
+*.log
+.env
+.env.*
+!.env.example
