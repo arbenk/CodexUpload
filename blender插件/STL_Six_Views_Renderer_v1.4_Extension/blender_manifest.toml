@@ -1,0 +1,17 @@
+schema_version = "1.0.0"
+
+id = "stl_six_views_renderer"
+version = "1.4.0"
+name = "STL Six Views Renderer"
+tagline = "Render six orthographic STL views and build image atlases"
+maintainer = "OpenAI"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = [
+    "SPDX:MIT",
+]
+
+[permissions]
+files = "Read STL/PNG files selected by the user and write rendered PNG views, atlases, and error logs"

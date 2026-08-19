@@ -1,0 +1,14 @@
+schema_version = "1.0.0"
+
+id = "drop_ground_align_tools"
+version = "1.7.1"
+name = "Drop to Ground & Align"
+tagline = "放置地面、外贴合、内码齐与分散对齐"
+maintainer = "OpenAI"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
