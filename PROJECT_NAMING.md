@@ -34,3 +34,9 @@ Blender-STL-Six-Views-Renderer.zip
 3. 将构建产物写入根目录的 `dist/`。
 4. 源码提交到 Git；`dist/` 只作为 GitHub Release 附件发布。
 5. README 和 Release 备注使用项目的简要能力描述。
+
+## GitHub 发布规则
+
+- “推送到 GitHub”表示同时完成源码推送和成品发布：先将源码提交并推送到目标分支，再把本次 `dist/` 构建产物上传为 GitHub Release 附件。
+- Release 附件继续使用上述稳定名称；同名附件存在时，用本次验证通过的最新构建覆盖。
+- 发布后核对远端提交、Release 附件名称及文件大小，不能只完成 `git push`。
