@@ -23,7 +23,7 @@ from bpy_extras.io_utils import ExportHelper
 # Constants / tags / units
 # -----------------------------------------------------------------------------
 
-ADDON_VERSION = (1, 7, 3)
+ADDON_VERSION = (1, 7, 4)
 GENERATED_TAG = "flatfab_generated"
 SOURCE_TAG = "flatfab_source_object"
 WIDTH_TAG = "flatfab_width_mm"
@@ -1024,17 +1024,16 @@ def _make_box_helper(scene, joint_id, target, operation, name, center, ax, ay, a
     ax, ay, az = ax.normalized(), ay.normalized(), az.normalized()
     if min(float(d) for d in dims) <= 1.0e-10:
         raise RuntimeError(f"连接辅助体尺寸无效：{name}")
-    # The three axes are expected to form an orthogonal manufacturing frame.
-    # Rebuild the third direction when numerical drift or a reversed frame
-    # would otherwise create a skewed/inward Boolean operand.
+    # The face indices below assume a right-handed frame.  Box dimensions are
+    # symmetric about every axis, so az's sign carries no geometry; always
+    # derive it from ax x ay.  Preserving an opposite az created a left-handed
+    # frame with right-handed face winding and inverted every helper face.
     if abs(ax.dot(ay)) > 1.0e-5:
         raise RuntimeError(f"连接辅助体轴向不正交：{name}")
     frame_z = ax.cross(ay)
     if frame_z.length <= 1.0e-10:
         raise RuntimeError(f"连接辅助体轴向退化：{name}")
     frame_z.normalize()
-    if frame_z.dot(az) < 0.0:
-        frame_z.negate()
     az = frame_z
     hx, hy, hz = dims[0] * 0.5, dims[1] * 0.5, dims[2] * 0.5
     verts = []
@@ -2581,6 +2580,84 @@ class FLATFAB_OT_create_joint(Operator):
         self.report({"INFO"}, scene.flatfab_last_result[:250])
         return {"FINISHED"}
 
+
+class FLATFAB_OT_create_edge_insert_batch(Operator):
+    bl_idname = "flatfab.create_edge_insert_batch"
+    bl_label = "批量生成边插"
+    bl_description = "在所有选中板件中自动检测有效的边贴面组合，并批量生成边插连接"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        scene = context.scene
+        settings = scene.flatfab_settings
+        selected = sorted((
+            obj for obj in context.selected_objects
+            if obj.type == "MESH"
+            and not obj.get(GENERATED_TAG, False)
+            and not obj.get(JOINT_HELPER_TAG, False)
+        ), key=lambda obj: obj.name.casefold())
+        if len(selected) < 2:
+            self.report({"ERROR"}, "请至少选择两个原始板件 Mesh")
+            return {"CANCELLED"}
+
+        existing = {
+            frozenset((record.object_a, record.object_b))
+            for record in scene.flatfab_joints
+            if record.joint_type == "EDGE_INSERT"
+        }
+        params_json = json.dumps(joint_params_from_settings(settings), ensure_ascii=False)
+        created = 0
+        duplicates = 0
+        unrelated = 0
+        failed = []
+
+        for index, a in enumerate(selected[:-1]):
+            for b in selected[index + 1:]:
+                pair_key = frozenset((a.name, b.name))
+                if pair_key in existing:
+                    duplicates += 1
+                    continue
+
+                record = scene.flatfab_joints.add()
+                record.joint_id = uuid.uuid4().hex
+                record.joint_type = "EDGE_INSERT"
+                record.object_a = a.name
+                record.object_b = b.name
+                record.name = f"EDGE_INSERT:{a.name}→{b.name}"
+                record.params_json = params_json
+                try:
+                    generate_joint_record(context, record)
+                except Exception as exc:
+                    clear_joint_geometry(record.joint_id)
+                    record_index = _joint_record_index(scene, record.joint_id)
+                    if record_index >= 0:
+                        scene.flatfab_joints.remove(record_index)
+                    # Most rejected pairs are simply not adjacent.  Keep a
+                    # small diagnostic sample without flooding the side panel.
+                    unrelated += 1
+                    if len(failed) < 3:
+                        failed.append(f"{a.name}/{b.name}: {str(exc)[:60]}")
+                    continue
+
+                created += 1
+                existing.add(pair_key)
+
+        total_pairs = len(selected) * (len(selected) - 1) // 2
+        summary = (
+            f"批量边插：检查 {total_pairs} 对，新增 {created}，"
+            f"跳过重复 {duplicates}，不相邻/不符合 {unrelated}"
+        )
+        scene.flatfab_last_result = summary
+        if created:
+            self.report({"INFO"}, summary)
+            return {"FINISHED"}
+        if failed:
+            self.report({"WARNING"}, (summary + "；" + failed[0])[:250])
+        else:
+            self.report({"WARNING"}, summary)
+        return {"CANCELLED"}
+
+
 class FLATFAB_OT_regenerate_joint(Operator):
     bl_idname = "flatfab.regenerate_joint"
     bl_label = "重新生成连接"
@@ -2931,6 +3008,7 @@ class FLATFAB_PG_Settings(PropertyGroup):
     # UI fold state
     ui_fold_setup: BoolProperty(name="展开单位与实体化", default=True)
     ui_fold_joints: BoolProperty(name="展开参数化连接", default=True)
+    ui_fold_joint_records: BoolProperty(name="展开连接记录", default=False)
     ui_fold_flatten: BoolProperty(name="展开 1:1 展平", default=True)
     ui_fold_transform: BoolProperty(name="展开方向与锁组", default=False)
     ui_fold_layout: BoolProperty(name="展开排版", default=True)
@@ -3596,26 +3674,35 @@ class FLATFAB_PT_main(Panel):
 
             col = box.column(align=True); col.scale_y = 1.25
             col.operator("flatfab.create_joint", text="生成参数化连接", icon="MOD_BOOLEAN")
+            if settings.joint_type == "EDGE_INSERT":
+                col.operator("flatfab.create_edge_insert_batch", text="批量生成选中板件的边插", icon="AUTOMERGE_ON")
 
             if len(scene.flatfab_joints):
                 box.separator()
-                box.label(text=f"已记录连接：{len(scene.flatfab_joints)}")
-                for record in scene.flatfab_joints:
-                    sub = box.box()
-                    row = sub.row(align=True)
-                    type_name = {"EDGE_INSERT":"边插", "CROSS":"十字插", "EDGE_CONNECT":"边连接", "THROUGH":"贯穿"}.get(record.joint_type, record.joint_type)
-                    arrow = "→" if record.joint_type in {"EDGE_INSERT", "THROUGH"} else "↔"
-                    row.label(text=f"{type_name}  {record.object_a} {arrow} {record.object_b}")
-                    op = row.operator("flatfab.load_joint_params", text="载入"); op.joint_id = record.joint_id
-                    op = row.operator("flatfab.apply_joint_params", text="应用"); op.joint_id = record.joint_id
-                    op = row.operator("flatfab.regenerate_joint", text="重算", icon="FILE_REFRESH"); op.joint_id = record.joint_id
-                    op = row.operator("flatfab.clear_joint_geometry", text="清几何"); op.joint_id = record.joint_id
-                    op = row.operator("flatfab.delete_joint", text="", icon="TRASH"); op.joint_id = record.joint_id
-                    if record.status:
-                        sub.label(text=record.status[:78])
+                records_open = settings.ui_fold_joint_records
                 row = box.row(align=True)
-                row.operator("flatfab.regenerate_all_joints", text="重算全部", icon="FILE_REFRESH")
-                row.operator("flatfab.clear_joint_geometry", text="清除全部几何")
+                row.prop(
+                    settings, "ui_fold_joint_records", text="",
+                    icon="TRIA_DOWN" if records_open else "TRIA_RIGHT", emboss=False,
+                )
+                row.label(text=f"已记录连接：{len(scene.flatfab_joints)}")
+                if records_open:
+                    for record in scene.flatfab_joints:
+                        sub = box.box()
+                        row = sub.row(align=True)
+                        type_name = {"EDGE_INSERT":"边插", "CROSS":"十字插", "EDGE_CONNECT":"边连接", "THROUGH":"贯穿"}.get(record.joint_type, record.joint_type)
+                        arrow = "→" if record.joint_type in {"EDGE_INSERT", "THROUGH"} else "↔"
+                        row.label(text=f"{type_name}  {record.object_a} {arrow} {record.object_b}")
+                        op = row.operator("flatfab.load_joint_params", text="载入"); op.joint_id = record.joint_id
+                        op = row.operator("flatfab.apply_joint_params", text="应用"); op.joint_id = record.joint_id
+                        op = row.operator("flatfab.regenerate_joint", text="重算", icon="FILE_REFRESH"); op.joint_id = record.joint_id
+                        op = row.operator("flatfab.clear_joint_geometry", text="清几何"); op.joint_id = record.joint_id
+                        op = row.operator("flatfab.delete_joint", text="", icon="TRASH"); op.joint_id = record.joint_id
+                        if record.status:
+                            sub.label(text=record.status[:78])
+                    row = box.row(align=True)
+                    row.operator("flatfab.regenerate_all_joints", text="重算全部", icon="FILE_REFRESH")
+                    row.operator("flatfab.clear_joint_geometry", text="清除全部几何")
                 box.operator("flatfab.delete_all_joints", text="删除全部连接定义", icon="TRASH")
 
         # 3. Flatten
@@ -3730,6 +3817,7 @@ classes = (
     FLATFAB_OT_add_joint_marker,
     FLATFAB_OT_remove_joint_marker,
     FLATFAB_OT_create_joint,
+    FLATFAB_OT_create_edge_insert_batch,
     FLATFAB_OT_regenerate_joint,
     FLATFAB_OT_regenerate_all_joints,
     FLATFAB_OT_clear_joint_geometry,

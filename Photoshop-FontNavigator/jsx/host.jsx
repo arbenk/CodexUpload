@@ -6,6 +6,8 @@ var FontNavigator = (function () {
     var pendingSource = "";
     var pendingTarget = null;
     var pendingChanged = 0;
+    var pendingScale = null;
+    var pendingScaleSkipped = 0;
     var installedFontCache = null;
 
     function escapeString(value) {
@@ -261,5 +263,85 @@ var FontNavigator = (function () {
         } catch (error) { return failure(error); }
     }
 
-    return { scanDocument: scanDocument, getInstalledFonts: getInstalledFonts, selectLayer: selectLayer, replaceFont: replaceFont, _replacePending: replacePending };
+    function numericValue(descriptor, key) {
+        var type = descriptor.getType(key);
+        if (type === DescValueType.UNITDOUBLE) return descriptor.getUnitDoubleValue(key);
+        if (type === DescValueType.DOUBLETYPE) return descriptor.getDouble(key);
+        if (type === DescValueType.INTEGERTYPE) return descriptor.getInteger(key);
+        return null;
+    }
+
+    function scaleNumeric(descriptor, key, factor) {
+        if (!descriptor.hasKey(key)) { pendingScaleSkipped++; return false; }
+        var type = descriptor.getType(key), value = numericValue(descriptor, key);
+        if (value === null) { pendingScaleSkipped++; return false; }
+        value *= factor;
+        if (type === DescValueType.UNITDOUBLE) descriptor.putUnitDouble(key, descriptor.getUnitDoubleType(key), value);
+        else if (type === DescValueType.DOUBLETYPE) descriptor.putDouble(key, value);
+        else descriptor.putInteger(key, Math.round(value));
+        return true;
+    }
+
+    function scaleTextStyle(style) {
+        var changed = false;
+        var sizeKey = s2t("size"), leadingKey = s2t("leading"), autoKey = s2t("autoLeading"), trackingKey = s2t("tracking");
+        var originalSize = style.hasKey(sizeKey) ? numericValue(style, sizeKey) : null;
+        var automatic = style.hasKey(autoKey) && style.getBoolean(autoKey);
+        if (pendingScale.leading !== 1) {
+            if (automatic) {
+                var originalLeading = style.hasKey(leadingKey) ? numericValue(style, leadingKey) : (originalSize === null ? null : originalSize * 1.2);
+                if (originalLeading === null) pendingScaleSkipped++;
+                else {
+                    style.putBoolean(autoKey, false);
+                    style.putUnitDouble(leadingKey, s2t("pointsUnit"), originalLeading * pendingScale.leading);
+                    changed = true;
+                }
+            } else if (scaleNumeric(style, leadingKey, pendingScale.leading)) changed = true;
+        }
+        if (pendingScale.size !== 1 && scaleNumeric(style, sizeKey, pendingScale.size)) changed = true;
+        if (pendingScale.tracking !== 1 && scaleNumeric(style, trackingKey, pendingScale.tracking)) changed = true;
+        return changed;
+    }
+
+    function scaleLayer(layerId) {
+        var text = getTextDescriptor(layerId), changed = false, i;
+        if (text.hasKey(s2t("textStyle"))) {
+            var baseStyle = text.getObjectValue(s2t("textStyle"));
+            if (scaleTextStyle(baseStyle)) { text.putObject(s2t("textStyle"), s2t("textStyle"), baseStyle); changed = true; }
+        }
+        if (text.hasKey(s2t("textStyleRange"))) {
+            var oldRanges = text.getList(s2t("textStyleRange")), newRanges = new ActionList(), rangesChanged = false;
+            for (i = 0; i < oldRanges.count; i++) {
+                var range = oldRanges.getObjectValue(i);
+                if (range.hasKey(s2t("textStyle"))) {
+                    var style = range.getObjectValue(s2t("textStyle"));
+                    if (scaleTextStyle(style)) { range.putObject(s2t("textStyle"), s2t("textStyle"), style); rangesChanged = true; }
+                }
+                newRanges.putObject(s2t("textStyleRange"), range);
+            }
+            if (rangesChanged) { text.putList(s2t("textStyleRange"), newRanges); changed = true; }
+        }
+        if (!changed) return false;
+        var reference = new ActionReference(); reference.putIdentifier(c2t("Lyr "), layerId);
+        var setDescriptor = new ActionDescriptor(); setDescriptor.putReference(c2t("null"), reference); setDescriptor.putObject(c2t("T   "), s2t("textLayer"), text);
+        executeAction(c2t("setd"), setDescriptor, DialogModes.NO);
+        return true;
+    }
+
+    function scalePending() {
+        var layers = []; collectTextLayers(app.activeDocument, layers); pendingChanged = 0; pendingScaleSkipped = 0;
+        for (var i = 0; i < layers.length; i++) if (scaleLayer(layers[i].id)) pendingChanged++;
+    }
+
+    function scaleTextProperties(sizeFactor, leadingFactor, trackingFactor) {
+        try {
+            if (!app.documents.length) throw new Error("当前没有打开的 Photoshop 文档。");
+            pendingScale = { size: Number(sizeFactor), leading: Number(leadingFactor), tracking: Number(trackingFactor) };
+            if (!(pendingScale.size > 0 && pendingScale.size <= 100 && pendingScale.leading > 0 && pendingScale.leading <= 100 && pendingScale.tracking > 0 && pendingScale.tracking <= 100)) throw new Error("缩放倍数必须大于 0 且不超过 100。");
+            app.activeDocument.suspendHistory("批量缩放文字属性", "FontNavigator._scalePending()");
+            return success({ changedLayers: pendingChanged, skippedProperties: pendingScaleSkipped });
+        } catch (error) { return failure(error); }
+    }
+
+    return { scanDocument: scanDocument, getInstalledFonts: getInstalledFonts, selectLayer: selectLayer, replaceFont: replaceFont, scaleTextProperties: scaleTextProperties, _replacePending: replacePending, _scalePending: scalePending };
 }());

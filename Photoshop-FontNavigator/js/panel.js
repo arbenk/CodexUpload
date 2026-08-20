@@ -50,6 +50,10 @@
     var fontInputDisabled = state.busy || !state.installedFonts.length;
     $("targetFont").disabled = fontInputDisabled; $("fontDropdownButton").disabled = fontInputDisabled;
     $("replaceButton").disabled = !enabled || !state.selectedTarget;
+    $("scaleTextButton").disabled = state.busy;
+    $("fontSizeMultiplier").disabled = state.busy;
+    $("leadingMultiplier").disabled = state.busy;
+    $("trackingMultiplier").disabled = state.busy;
     $("refreshButton").disabled = state.busy;
     $("customZoom").disabled = state.busy || !$("followView").checked;
     $("followZoom").disabled = state.busy || !$("followView").checked || !$("customZoom").checked;
@@ -133,6 +137,27 @@
     try { var result = await hostCall("FontNavigator.replaceFont(" + quote(record.postScriptName) + "," + quote(target) + ")"); status("替换完成，已更新 " + result.changedLayers + " 个图层。"); await refresh(); }
     catch (error) { status(error.message, true); } finally { setBusy(false); }
   }
+  function multiplier(id, label) {
+    var value = Number($(id).value);
+    if (!isFinite(value) || value <= 0 || value > 100) throw new Error(label + "倍数必须大于 0 且不超过 100。");
+    return value;
+  }
+  async function scaleText() {
+    var size, leading, tracking;
+    try {
+      size = multiplier("fontSizeMultiplier", "字号");
+      leading = multiplier("leadingMultiplier", "行距");
+      tracking = multiplier("trackingMultiplier", "字距");
+    } catch (error) { status(error.message, true); return; }
+    if (size === 1 && leading === 1 && tracking === 1) { status("三个倍数都是 1，没有需要修改的属性。", true); return; }
+    if (!window.confirm("把当前文档全部文字图层的字号、行距和字距按输入倍数修改？")) return;
+    setBusy(true); status("正在批量缩放文字属性…");
+    try {
+      var result = await hostCall("FontNavigator.scaleTextProperties(" + size + "," + leading + "," + tracking + ")");
+      status("缩放完成，已更新 " + result.changedLayers + " 个文字图层。跳过 " + result.skippedProperties + " 个无可缩放当前值的属性。");
+      await refresh();
+    } catch (error) { status(error.message, true); } finally { setBusy(false); }
+  }
   document.addEventListener("DOMContentLoaded", function () {
     $("refreshButton").onclick = refresh; $("previousButton").onclick = function () { navigate(1); }; $("nextButton").onclick = function () { navigate(-1); }; $("followView").onchange = controls; $("customZoom").onchange = controls;
     $("targetFont").oninput = function () { state.selectedTarget = null; renderFontOptions(this.value); controls(); };
@@ -144,6 +169,6 @@
     };
     $("fontDropdownButton").onclick = function () { if ($("fontDropdown").hidden) { $("targetFont").focus(); renderFontOptions(""); } else closeFontDropdown(); };
     document.addEventListener("click", function (event) { if (!$("fontCombobox").contains(event.target)) closeFontDropdown(); });
-    $("replaceButton").onclick = replaceFont; loadFonts();
+    $("replaceButton").onclick = replaceFont; $("scaleTextButton").onclick = scaleText; loadFonts();
   });
 }());

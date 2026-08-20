@@ -34,7 +34,7 @@ button:hover:not(:disabled) { background:#525252; }
 button:disabled,input:disabled { opacity:.45; }
 button.secondary { min-height:27px; }
 button.danger:not(:disabled) { border-color:#b94b4b; background:var(--danger); }
-.replace-box { padding-top:12px; border-top:1px solid var(--border); }
+.replace-box,.scale-box { padding-top:12px; border-top:1px solid var(--border); }
 .replace-box label { display:block; margin-bottom:6px; }
 .font-combobox { position:relative; display:flex; width:100%; }
 #targetFont { width:100%; min-width:0; padding:4px 32px 4px 7px; }
@@ -44,4 +44,9 @@ button.danger:not(:disabled) { border-color:#b94b4b; background:var(--danger); }
 .font-option:hover,.font-option.active { background:#24517e; }
 .font-no-match { padding:9px; color:var(--muted); text-align:center; }
 #replaceButton { width:100%; margin-top:9px; }
+.scale-fields { display:flex; gap:7px; }
+.scale-fields label { display:grid; flex:1; grid-template-columns:1fr; gap:4px; min-width:0; color:#ccc; font-size:12px; text-align:center; }
+.scale-fields input { width:100%; min-width:0; padding:4px; text-align:center; }
+.scale-fields label span:last-child { display:none; }
+#scaleTextButton { width:100%; margin-top:9px; }
 .hint { margin:7px 0 0; font-size:11px; }

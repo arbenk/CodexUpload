@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.local.fontnavigator.cep" ExtensionBundleVersion="1.2.3" ExtensionBundleName="字体导航与批量替换">
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.local.fontnavigator.cep" ExtensionBundleVersion="1.3.0" ExtensionBundleName="字体导航与批量替换">
   <ExtensionList>
-    <Extension Id="com.local.fontnavigator.cep.panel" Version="1.2.3" />
+    <Extension Id="com.local.fontnavigator.cep.panel" Version="1.3.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList><Host Name="PHXS" Version="[21.0,24.0)" /></HostList>
