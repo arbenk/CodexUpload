@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "flatfab_plate_flatten"
-version = "1.7.4"
+version = "1.8.2"
 name = "FlatFab Plate Flatten"
 tagline = "Plate joints, clipping, flattening, layout export and UV sync"
 maintainer = "OpenAI"

@@ -23,7 +23,7 @@ from bpy_extras.io_utils import ExportHelper
 # Constants / tags / units
 # -----------------------------------------------------------------------------
 
-ADDON_VERSION = (1, 7, 4)
+ADDON_VERSION = (1, 8, 2)
 GENERATED_TAG = "flatfab_generated"
 SOURCE_TAG = "flatfab_source_object"
 WIDTH_TAG = "flatfab_width_mm"
@@ -942,6 +942,64 @@ def _coplanar_edge_contact(frame_a, frame_b, scene, settings):
     return best
 
 
+def _perpendicular_edge_contact(frame_a, frame_b, scene, settings):
+    """Find the longest coincident boundary interval of two perpendicular plates."""
+    dot = abs(frame_a["n"].dot(frame_b["n"]))
+    if dot > math.sin(math.radians(settings.joint_angle_tolerance_deg)):
+        raise RuntimeError("h 扣插要求两块板材板面近似垂直")
+
+    tol = mm_to_bu(scene, settings.joint_detect_tolerance_mm)
+    parallel_limit = math.cos(math.radians(settings.joint_angle_tolerance_deg))
+    best = None
+    for i, a0 in enumerate(frame_a["outer_world"]):
+        a1 = frame_a["outer_world"][(i + 1) % len(frame_a["outer_world"])]
+        da = a1 - a0
+        if da.length <= 1.0e-10:
+            continue
+        d = da.normalized()
+        for j, b0 in enumerate(frame_b["outer_world"]):
+            b1 = frame_b["outer_world"][(j + 1) % len(frame_b["outer_world"])]
+            db = b1 - b0
+            if db.length <= 1.0e-10 or abs(d.dot(db.normalized())) < parallel_limit:
+                continue
+
+            # Distance between the two parallel supporting lines.
+            delta = b0 - a0
+            lateral = delta - d * delta.dot(d)
+            gap = lateral.length
+            if gap > tol:
+                continue
+            at = sorted((a0.dot(d), a1.dot(d)))
+            bt = sorted((b0.dot(d), b1.dot(d)))
+            lo, hi = max(at[0], bt[0]), min(at[1], bt[1])
+            if hi - lo <= 1.0e-8:
+                continue
+            line_mid = (a0 + b0) * 0.5
+            start = line_mid + d * (lo - line_mid.dot(d))
+            end = line_mid + d * (hi - line_mid.dot(d))
+            score = (gap, -(hi - lo))
+            if best is None or score < best["score"]:
+                best = {"score": score, "gap": gap, "start": start, "end": end,
+                        "direction": d if (end - start).dot(d) >= 0.0 else -d}
+
+    if best is None:
+        raise RuntimeError("h 扣插：找不到两块垂直板材的贴合公共边")
+
+    d = best["direction"].normalized()
+    mid = (best["start"] + best["end"]) * 0.5
+    out_a = mid - _project_point_to_plane(frame_a["centroid"], frame_a["n"], frame_a["center_d"])
+    out_a -= d * out_a.dot(d)
+    out_b = mid - _project_point_to_plane(frame_b["centroid"], frame_b["n"], frame_b["center_d"])
+    out_b -= d * out_b.dot(d)
+    if out_a.length <= 1.0e-10:
+        out_a = frame_a["n"].cross(d)
+    if out_b.length <= 1.0e-10:
+        out_b = frame_b["n"].cross(d)
+    best["out_a"] = out_a.normalized()
+    best["out_b"] = out_b.normalized()
+    return best
+
+
 def _tooth_intervals(length, params, scene):
     mode = params.get("tooth_mode", "AVERAGE")
     if length <= 1.0e-10:
@@ -958,15 +1016,32 @@ def _tooth_intervals(length, params, scene):
     if mode == "POINT":
         n = max(1, int(params.get("tooth_count", 2)))
         width = mm_to_bu(scene, max(0.001, float(params.get("tooth_width_mm", 50.0))))
-        free = length - n * width
-        gap = free / (n + 1) if free > 0.0 else -1.0
-        if gap <= 0.0 or width > gap + 1.0e-9:
-            max_width = length / (2 * n + 1)
+        if n == 1:
+            if width > length + 1.0e-9:
+                raise RuntimeError(
+                    f"单个点齿宽度不能超过贴合边长度；当前最多约 {bu_to_mm(scene, length):.2f} mm"
+                )
+            start = (length - width) * 0.5
+            return [(start, start + width)]
+
+        edge_distance = mm_to_bu(
+            scene, max(0.0, float(params.get("point_edge_distance_mm", 50.0)))
+        )
+        internal_free = length - edge_distance * 2.0 - n * width
+        gap = internal_free / (n - 1)
+        if gap < -1.0e-9:
+            max_width = max(0.0, (length - edge_distance * 2.0) / n)
             raise RuntimeError(
-                f"点齿宽度不能超过均匀间隙；当前最多约 {bu_to_mm(scene, max_width):.2f} mm"
+                f"点齿与边缘距离超出贴合边；当前齿宽最多约 {bu_to_mm(scene, max_width):.2f} mm，"
+                "也可以减小边缘距离"
+            )
+        if width > gap + 1.0e-9:
+            max_width = max(0.0, (length - edge_distance * 2.0) / (2 * n - 1))
+            raise RuntimeError(
+                f"点齿宽度不能超过齿间的内部均匀间隙；当前最多约 {bu_to_mm(scene, max_width):.2f} mm"
             )
         result = []
-        cursor = gap
+        cursor = edge_distance
         for _i in range(n):
             result.append((cursor, cursor + width))
             cursor += width + gap
@@ -1337,6 +1412,96 @@ def _generate_edge_connect(scene, settings, record, params, a, b, fa, fb):
 
     return created, f"边连接 {2*n+1} 段锯齿 / A、B 双向齿槽 / 深度 {bu_to_mm(scene, depth):.2f} mm" + (" / 楔形" if wedge else "")
 
+
+def _h_clasp_polygon(junction, direction, outward, root_length, tongue_length, width, tongue_sign, chamfer, eps):
+    """L-shaped clasp whose inner tongue end is anchored at `junction`.
+
+    Both mating outlines receive the same junction.  Reversing the sign puts
+    the root and tongue on opposite sides of that point, so unequal root and
+    tongue lengths still align without shifting or overlapping after assembly.
+    """
+    d = direction.normalized() * (1.0 if tongue_sign >= 0.0 else -1.0)
+    o = outward.normalized()
+    center = junction - d * (root_length * 0.5)
+    root_start = center - d * (root_length * 0.5)
+    root_end = center + d * (root_length * 0.5)
+    tongue_end = root_end + d * tongue_length
+    inner = width * 0.5
+    chamfer = max(0.0, min(chamfer, root_length * 0.5, tongue_length * 0.5, inner * 0.5))
+    if chamfer <= 1.0e-10:
+        return [
+            root_start - o * eps,
+            root_end - o * eps,
+            root_end + o * inner,
+            tongue_end + o * inner,
+            tongue_end + o * width,
+            root_start + o * width,
+        ]
+    return [
+        root_start - o * eps,
+        root_end - o * eps,
+        root_end + o * inner,
+        tongue_end - d * chamfer + o * inner,
+        tongue_end + o * (inner + chamfer),
+        tongue_end + o * (width - chamfer),
+        tongue_end - d * chamfer + o * width,
+        root_start + d * chamfer + o * width,
+        root_start + o * (width - chamfer),
+    ]
+
+
+def _generate_h_clasp(scene, settings, record, params, a, b, fa, fb):
+    contact = _perpendicular_edge_contact(fa, fb, scene, settings)
+    d = contact["direction"].normalized()
+    start, end = contact["start"], contact["end"]
+    available = (end - start).length
+    count = max(1, int(params.get("h_count", 2)))
+    tongue = mm_to_bu(scene, max(0.001, float(params.get("h_tongue_length_mm", 10.0))))
+    total = mm_to_bu(scene, max(0.001, float(params.get("h_total_length_mm", 30.0))))
+    if total <= tongue + 1.0e-10:
+        raise RuntimeError("h 扣插：总长度必须大于插舌长度")
+    root = total - tongue
+    footprint_half = max(root, tongue)
+    required = footprint_half * 2.0 * count
+    if required > available + 1.0e-8:
+        raise RuntimeError(
+            f"h 扣插：{count} 个扣件按共同内端中心排布至少需要 {bu_to_mm(scene, required):.2f} mm 公共边，"
+            f"当前只有 {bu_to_mm(scene, available):.2f} mm"
+        )
+
+    gap = (available - required) / (count + 1)
+    reverse = bool(params.get("h_reverse", False))
+    chamfer = mm_to_bu(scene, max(0.0, float(params.get("h_chamfer_mm", 1.0))))
+    eps = _joint_epsilon(scene)
+    created = 0
+    for i in range(count):
+        junction_t = gap * (i + 1) + footprint_half * (2 * i + 1)
+        junction = start + d * junction_t
+        sign_a = -1.0 if reverse else 1.0
+        sign_b = -sign_a
+        for obj, frame, outward, sign, suffix, other_frame in (
+            (a, fa, contact["out_a"], sign_a, "A", fb),
+            (b, fb, contact["out_b"], sign_b, "B", fa),
+        ):
+            # Each clasp reaches twice the mating plate thickness, as required.
+            clasp_width = other_frame["thickness"] * 2.0
+            poly = _h_clasp_polygon(junction, d, outward, root, tongue, clasp_width, sign, chamfer, eps)
+            poly = [_project_point_to_plane(p, frame["n"], frame["center_d"]) for p in poly]
+            label = f"H_{suffix}_{i + 1:02d}"
+            helper = _make_prism_helper(
+                scene, record.joint_id, obj, "UNION", f"FFJ_{record.joint_id[:8]}_{label}",
+                poly, frame["n"], frame["thickness"] + eps * 2.0,
+            )
+            _add_joint_boolean(obj, helper, record.joint_id, "UNION", label)
+            created += 1
+
+    direction_text = "已翻转" if reverse else "默认方向"
+    record.name = f"H_CLASP:{a.name}↔{b.name}"
+    return created, (
+        f"h 扣插 {count} 组 / 插舌 {bu_to_mm(scene, tongue):.2f} mm / "
+        f"总长 {bu_to_mm(scene, total):.2f} mm / 倒角 {bu_to_mm(scene, chamfer):.2f} mm / {direction_text}"
+    )
+
 def _through_role_score(frame, common):
     """Heuristic: a local/narrow plate is usually the penetrating member."""
     total_support = sum(b - a for a, b in _merge_intervals(frame.get("_through_segments", [])))
@@ -1409,11 +1574,17 @@ def joint_params_from_settings(settings):
         "average_input": settings.joint_average_input,
         "tooth_count": settings.joint_tooth_count,
         "tooth_width_mm": settings.joint_tooth_width_mm,
+        "point_edge_distance_mm": settings.joint_point_edge_distance_mm,
         "cross_reverse": settings.joint_cross_reverse,
         "through_reverse": settings.joint_through_reverse,
         "edge_depth_mm": settings.joint_edge_depth_mm,
         "edge_wedge": settings.joint_edge_wedge,
         "edge_wedge_ratio": settings.joint_edge_wedge_ratio,
+        "h_tongue_length_mm": settings.joint_h_tongue_length_mm,
+        "h_total_length_mm": settings.joint_h_total_length_mm,
+        "h_count": settings.joint_h_count,
+        "h_reverse": settings.joint_h_reverse,
+        "h_chamfer_mm": settings.joint_h_chamfer_mm,
         "markers": [
             {"gap_mm": item.gap_mm, "width_mm": item.width_mm}
             for item in settings.joint_markers
@@ -1441,6 +1612,8 @@ def generate_joint_record(context, record):
         count, detail = _generate_cross(scene, settings, record, params, a, b, fa, fb)
     elif record.joint_type == "EDGE_CONNECT":
         count, detail = _generate_edge_connect(scene, settings, record, params, a, b, fa, fb)
+    elif record.joint_type == "H_CLASP":
+        count, detail = _generate_h_clasp(scene, settings, record, params, a, b, fa, fb)
     elif record.joint_type == "THROUGH":
         count, detail = _generate_through(scene, settings, record, params, a, b, fa, fb)
     else:
@@ -2502,6 +2675,7 @@ class FLATFAB_PG_JointRecord(PropertyGroup):
             ("EDGE_INSERT", "边插", "自动识别边插面：边侧生成插齿，面侧生成插槽"),
             ("CROSS", "十字插", "两板重叠后沿交线方向半齿镶嵌"),
             ("EDGE_CONNECT", "边连接", "两块共面板材的锯齿/楔形连接"),
+            ("H_CLASP", "h 扣插", "两块垂直贴边板材生成相反朝向的 h 形互锁扣舌"),
             ("THROUGH", "贯穿", "自动判断贯穿片/接收板，并在接收板生成多区间投影槽"),
         ),
         default="EDGE_INSERT",
@@ -2783,11 +2957,17 @@ class FLATFAB_OT_load_joint_params(Operator):
         settings.joint_average_input = params.get("average_input", settings.joint_average_input)
         settings.joint_tooth_count = int(params.get("tooth_count", settings.joint_tooth_count))
         settings.joint_tooth_width_mm = float(params.get("tooth_width_mm", settings.joint_tooth_width_mm))
+        settings.joint_point_edge_distance_mm = float(params.get("point_edge_distance_mm", settings.joint_point_edge_distance_mm))
         settings.joint_cross_reverse = bool(params.get("cross_reverse", settings.joint_cross_reverse))
         settings.joint_through_reverse = bool(params.get("through_reverse", settings.joint_through_reverse))
         settings.joint_edge_depth_mm = float(params.get("edge_depth_mm", settings.joint_edge_depth_mm))
         settings.joint_edge_wedge = bool(params.get("edge_wedge", settings.joint_edge_wedge))
         settings.joint_edge_wedge_ratio = float(params.get("edge_wedge_ratio", settings.joint_edge_wedge_ratio))
+        settings.joint_h_tongue_length_mm = float(params.get("h_tongue_length_mm", settings.joint_h_tongue_length_mm))
+        settings.joint_h_total_length_mm = float(params.get("h_total_length_mm", settings.joint_h_total_length_mm))
+        settings.joint_h_count = int(params.get("h_count", settings.joint_h_count))
+        settings.joint_h_reverse = bool(params.get("h_reverse", settings.joint_h_reverse))
+        settings.joint_h_chamfer_mm = float(params.get("h_chamfer_mm", settings.joint_h_chamfer_mm))
         settings.joint_markers.clear()
         for marker in params.get("markers", []):
             item = settings.joint_markers.add()
@@ -2938,6 +3118,7 @@ class FLATFAB_PG_Settings(PropertyGroup):
             ("EDGE_INSERT", "边插", "自动识别边贴面关系；边侧插齿，面侧插槽"),
             ("CROSS", "十字插", "两板交叉重叠，每个有效区间固定二等分为互补半齿"),
             ("EDGE_CONNECT", "边连接", "A/B 共面贴边，生成锯齿或楔形拼接"),
+            ("H_CLASP", "h 扣插", "两块垂直贴边板材生成互锁 h 形扣舌"),
             ("THROUGH", "贯穿", "自动判断贯穿方，并在接收板生成多区间投影槽"),
         ),
         default="EDGE_INSERT",
@@ -2981,6 +3162,10 @@ class FLATFAB_PG_Settings(PropertyGroup):
     joint_tooth_width_mm: FloatProperty(
         name="齿宽 (mm)", default=50.0, min=0.001, soft_max=500.0, precision=2,
     )
+    joint_point_edge_distance_mm: FloatProperty(
+        name="边缘距离 (mm)", default=50.0, min=0.0, soft_max=500.0, precision=2,
+        description="点齿模式下板边到最外侧点齿边缘的距离；不参与齿间均匀间隙计算，可设为 0",
+    )
     joint_markers: CollectionProperty(type=FLATFAB_PG_JointMarker)
     joint_cross_reverse: BoolProperty(
         name="反转半齿 / 进入方向", default=False,
@@ -2997,6 +3182,23 @@ class FLATFAB_PG_Settings(PropertyGroup):
     joint_edge_wedge_ratio: FloatProperty(
         name="楔形扩张", default=0.20, min=0.0, max=0.45, subtype="FACTOR", precision=2,
         description="齿尖相对齿根的横向扩张比例",
+    )
+    joint_h_tongue_length_mm: FloatProperty(
+        name="插舌长度 (mm)", default=10.0, min=0.001, soft_max=200.0, precision=2,
+        description="h 扣末端沿公共边继续伸出的锁定长度",
+    )
+    joint_h_total_length_mm: FloatProperty(
+        name="总体长度 (mm)", default=30.0, min=0.002, soft_max=500.0, precision=2,
+        description="沿公共边的根部长度与插舌长度之和",
+    )
+    joint_h_count: IntProperty(name="h 扣数量", default=2, min=1, soft_max=50)
+    joint_h_reverse: BoolProperty(
+        name="翻转扣插方向", default=False,
+        description="交换两块板扣舌的伸出朝向，从而改变插入方向",
+    )
+    joint_h_chamfer_mm: FloatProperty(
+        name="扣舌倒角 (mm)", default=1.0, min=0.0, soft_max=10.0, precision=2,
+        description="h 扣外侧转角与插舌自由端的直线倒角；过大时自动限制",
     )
 
     square_packing: BoolProperty(
@@ -3636,7 +3838,9 @@ class FLATFAB_PT_main(Panel):
                     row = box.row(align=True)
                     row.prop(settings, "joint_tooth_count")
                     row.prop(settings, "joint_tooth_width_mm")
-                    box.label(text="点齿中心均匀分布；齿宽不能超过均匀间隙", icon="INFO")
+                    box.prop(settings, "joint_point_edge_distance_mm")
+                    box.label(text="边缘距离不计入内部均匀间隙；单齿始终居中，不受齿间隙限制", icon="INFO")
+                    box.label(text="两个及以上点齿时，齿宽不能超过相邻齿之间的内部均匀间隙", icon="INFO")
                 else:
                     box.label(text="标记间距从上一齿末端开始累计；第 1 个从边起点累计")
                     for i, marker in enumerate(settings.joint_markers):
@@ -3666,6 +3870,18 @@ class FLATFAB_PT_main(Panel):
                     box.prop(settings, "joint_edge_wedge_ratio")
                 box.label(text="共面贴边后 A/B 双向生成 UNION 齿 + DIFFERENCE 槽；切刀会跨过接缝保证真实相交", icon="INFO")
 
+            elif settings.joint_type == "H_CLASP":
+                box.separator()
+                row = box.row(align=True)
+                row.prop(settings, "joint_h_tongue_length_mm")
+                row.prop(settings, "joint_h_total_length_mm")
+                row = box.row(align=True)
+                row.prop(settings, "joint_h_count")
+                row.prop(settings, "joint_h_chamfer_mm")
+                box.prop(settings, "joint_h_reverse")
+                box.label(text="垂直贴边板件双向生成 L 形扣舌；扣体宽度自动为对方板厚的 2 倍", icon="INFO")
+                box.label(text="总体长度 = 连板根部长度 + 插舌长度；倒角默认 1 mm", icon="INFO")
+
             else:
                 box.separator()
                 box.prop(settings, "joint_through_reverse")
@@ -3690,7 +3906,7 @@ class FLATFAB_PT_main(Panel):
                     for record in scene.flatfab_joints:
                         sub = box.box()
                         row = sub.row(align=True)
-                        type_name = {"EDGE_INSERT":"边插", "CROSS":"十字插", "EDGE_CONNECT":"边连接", "THROUGH":"贯穿"}.get(record.joint_type, record.joint_type)
+                        type_name = {"EDGE_INSERT":"边插", "CROSS":"十字插", "EDGE_CONNECT":"边连接", "H_CLASP":"h 扣插", "THROUGH":"贯穿"}.get(record.joint_type, record.joint_type)
                         arrow = "→" if record.joint_type in {"EDGE_INSERT", "THROUGH"} else "↔"
                         row.label(text=f"{type_name}  {record.object_a} {arrow} {record.object_b}")
                         op = row.operator("flatfab.load_joint_params", text="载入"); op.joint_id = record.joint_id
