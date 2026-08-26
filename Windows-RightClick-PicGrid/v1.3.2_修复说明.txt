@@ -1,0 +1,12 @@
+PicGrid v1.3.2 修复说明
+
+修复：Win10/.NET Framework 自带 C# 编译器报 CS1061，导致单实例 EXE 无法生成。
+原因：程序内部自定义的 LayoutEngine 类型名与 WinForms Control.LayoutEngine 属性重名。
+处理：自定义类型已改名为 GridLayoutEngine，消除名称冲突。
+
+安装：
+1. 解压本 ZIP。
+2. 双击“安装右键菜单.vbs”。
+3. 不需要安装 v1.2，也不需要先恢复旧版本。
+
+如之前安装进入了兼容模式，直接再次运行安装脚本即可覆盖升级为 EXE 模式。
