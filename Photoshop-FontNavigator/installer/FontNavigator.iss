@@ -1,5 +1,5 @@
 #define MyAppName "字体导航与批量替换"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.4.0"
 #define MyAppPublisher "Local"
 #define MyExtensionId "com.local.fontnavigator.cep"
 

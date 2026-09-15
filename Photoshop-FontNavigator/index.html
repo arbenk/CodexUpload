@@ -30,14 +30,14 @@
       <p class="hint">混合字体图层只替换匹配的文字区间。</p>
     </section>
     <section class="scale-box">
-      <div class="section-title"><span>批量缩放文字属性</span></div>
+      <div class="section-title"><span>批量调整文字属性</span></div>
       <div class="scale-fields">
-        <label><span>字号</span><input id="fontSizeMultiplier" type="number" min="0.01" max="100" step="0.1" value="1"><span>倍</span></label>
-        <label><span>行距</span><input id="leadingMultiplier" type="number" min="0.01" max="100" step="0.1" value="1"><span>倍</span></label>
-        <label><span>字距</span><input id="trackingMultiplier" type="number" min="0.01" max="100" step="0.1" value="1"><span>倍</span></label>
+        <label><span>字号倍率</span><input id="fontSizeMultiplier" type="number" min="0.01" max="100" step="0.1" value="1"><span>倍</span></label>
+        <label><span>行距增减</span><input id="leadingMultiplier" type="number" min="-10000" max="10000" step="0.1" value="0"><span>点</span></label>
+        <label><span>字距增减</span><input id="trackingMultiplier" type="number" min="-10000" max="10000" step="1" value="0"><span>值</span></label>
       </div>
-      <button id="scaleTextButton">应用到全部文字图层</button>
-      <p class="hint">按各文字区间的当前值分别计算；自动行距会转换为等效固定行距后缩放。</p>
+      <button id="scaleTextButton" disabled>调整所选字体</button>
+      <p class="hint">字号按倍率计算；行距和字距在各自当前值上加减。自动行距会先转换为等效固定行距。</p>
     </section>
     <p id="status" class="status" aria-live="polite">打开一个文档，然后点击“刷新”。</p>
   </main>

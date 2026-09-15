@@ -50,10 +50,10 @@
     var fontInputDisabled = state.busy || !state.installedFonts.length;
     $("targetFont").disabled = fontInputDisabled; $("fontDropdownButton").disabled = fontInputDisabled;
     $("replaceButton").disabled = !enabled || !state.selectedTarget;
-    $("scaleTextButton").disabled = state.busy;
-    $("fontSizeMultiplier").disabled = state.busy;
-    $("leadingMultiplier").disabled = state.busy;
-    $("trackingMultiplier").disabled = state.busy;
+    $("scaleTextButton").disabled = !enabled;
+    $("fontSizeMultiplier").disabled = !enabled;
+    $("leadingMultiplier").disabled = !enabled;
+    $("trackingMultiplier").disabled = !enabled;
     $("refreshButton").disabled = state.busy;
     $("customZoom").disabled = state.busy || !$("followView").checked;
     $("followZoom").disabled = state.busy || !$("followView").checked || !$("customZoom").checked;
@@ -142,20 +142,26 @@
     if (!isFinite(value) || value <= 0 || value > 100) throw new Error(label + "倍数必须大于 0 且不超过 100。");
     return value;
   }
+  function adjustment(id, label) {
+    var value = Number($(id).value);
+    if (!isFinite(value) || value < -10000 || value > 10000) throw new Error(label + "增减值必须在 -10000 到 10000 之间。");
+    return value;
+  }
   async function scaleText() {
+    var record = selectedRecord();
+    if (!record) { status("请先从当前文档字体列表中选择要缩放的字体。", true); return; }
     var size, leading, tracking;
     try {
       size = multiplier("fontSizeMultiplier", "字号");
-      leading = multiplier("leadingMultiplier", "行距");
-      tracking = multiplier("trackingMultiplier", "字距");
+      leading = adjustment("leadingMultiplier", "行距");
+      tracking = adjustment("trackingMultiplier", "字距");
     } catch (error) { status(error.message, true); return; }
-    if (size === 1 && leading === 1 && tracking === 1) { status("三个倍数都是 1，没有需要修改的属性。", true); return; }
-    if (!window.confirm("把当前文档全部文字图层的字号、行距和字距按输入倍数修改？")) return;
-    setBusy(true); status("正在批量缩放文字属性…");
+    if (size === 1 && leading === 0 && tracking === 0) { status("字号倍率为 1，行距和字距增减值为 0，没有需要修改的属性。", true); return; }
+    if (!window.confirm("调整当前文档中使用“" + (record.displayName || record.family || record.postScriptName) + "”的文字区间？\n\n字号 ×" + size + "，行距 " + (leading >= 0 ? "+" : "") + leading + "，字距 " + (tracking >= 0 ? "+" : "") + tracking)) return;
+    setBusy(true); status("正在批量调整文字属性…");
     try {
-      var result = await hostCall("FontNavigator.scaleTextProperties(" + size + "," + leading + "," + tracking + ")");
-      status("缩放完成，已更新 " + result.changedLayers + " 个文字图层。跳过 " + result.skippedProperties + " 个无可缩放当前值的属性。");
-      await refresh();
+      var result = await hostCall("FontNavigator.scaleTextProperties(" + quote(record.postScriptName) + "," + quote(record.family || "") + "," + quote(record.style || "") + "," + size + "," + leading + "," + tracking + ")");
+      status("调整完成，已更新 " + result.changedLayers + " 个文字图层。跳过 " + result.skippedProperties + " 个无效或超出范围的属性。");
     } catch (error) { status(error.message, true); } finally { setBusy(false); }
   }
   document.addEventListener("DOMContentLoaded", function () {

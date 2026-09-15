@@ -273,8 +273,14 @@ var FontNavigator = (function () {
 
     function scaleNumeric(descriptor, key, factor) {
         if (!descriptor.hasKey(key)) { pendingScaleSkipped++; return false; }
+        if (!scaleOptionalNumeric(descriptor, key, factor)) { pendingScaleSkipped++; return false; }
+        return true;
+    }
+
+    function scaleOptionalNumeric(descriptor, key, factor) {
+        if (!descriptor.hasKey(key)) return false;
         var type = descriptor.getType(key), value = numericValue(descriptor, key);
-        if (value === null) { pendingScaleSkipped++; return false; }
+        if (value === null) return false;
         value *= factor;
         if (type === DescValueType.UNITDOUBLE) descriptor.putUnitDouble(key, descriptor.getUnitDoubleType(key), value);
         else if (type === DescValueType.DOUBLETYPE) descriptor.putDouble(key, value);
@@ -282,32 +288,68 @@ var FontNavigator = (function () {
         return true;
     }
 
-    function scaleTextStyle(style) {
-        var changed = false;
-        var sizeKey = s2t("size"), leadingKey = s2t("leading"), autoKey = s2t("autoLeading"), trackingKey = s2t("tracking");
+    function addNumeric(descriptor, key, amount, minimum, maximum) {
+        if (!descriptor.hasKey(key)) { pendingScaleSkipped++; return false; }
+        var type = descriptor.getType(key), value = numericValue(descriptor, key);
+        if (value === null) { pendingScaleSkipped++; return false; }
+        value += amount;
+        if (value < minimum || value > maximum) { pendingScaleSkipped++; return false; }
+        if (type === DescValueType.UNITDOUBLE) descriptor.putUnitDouble(key, descriptor.getUnitDoubleType(key), value);
+        else if (type === DescValueType.DOUBLETYPE) descriptor.putDouble(key, value);
+        else descriptor.putInteger(key, Math.round(value));
+        return true;
+    }
+
+    function addLeading(style, amount, sizeKey, impliedSizeKey, leadingKey, impliedLeadingKey, autoKey) {
         var originalSize = style.hasKey(sizeKey) ? numericValue(style, sizeKey) : null;
-        var automatic = style.hasKey(autoKey) && style.getBoolean(autoKey);
-        if (pendingScale.leading !== 1) {
-            if (automatic) {
-                var originalLeading = style.hasKey(leadingKey) ? numericValue(style, leadingKey) : (originalSize === null ? null : originalSize * 1.2);
-                if (originalLeading === null) pendingScaleSkipped++;
-                else {
-                    style.putBoolean(autoKey, false);
-                    style.putUnitDouble(leadingKey, s2t("pointsUnit"), originalLeading * pendingScale.leading);
-                    changed = true;
-                }
-            } else if (scaleNumeric(style, leadingKey, pendingScale.leading)) changed = true;
+        var impliedSize = style.hasKey(impliedSizeKey) ? numericValue(style, impliedSizeKey) : null;
+        var originalLeading = style.hasKey(leadingKey) ? numericValue(style, leadingKey) : (originalSize === null ? null : originalSize * 1.2);
+        if (originalLeading === null) { pendingScaleSkipped++; return false; }
+        var ratio = originalSize && impliedSize ? impliedSize / originalSize : 1;
+        if (!(ratio > 0)) ratio = 1;
+        var impliedLeading = style.hasKey(impliedLeadingKey) ? numericValue(style, impliedLeadingKey) : originalLeading * ratio;
+        var newLeading = originalLeading + amount / ratio;
+        var newImpliedLeading = impliedLeading + amount;
+        if (!(newLeading > 0 && newLeading <= 10000 && newImpliedLeading > 0 && newImpliedLeading <= 10000)) { pendingScaleSkipped++; return false; }
+        style.putBoolean(autoKey, false);
+        style.putUnitDouble(leadingKey, s2t("pointsUnit"), newLeading);
+        if (style.hasKey(impliedLeadingKey) || ratio !== 1) style.putUnitDouble(impliedLeadingKey, s2t("pointsUnit"), newImpliedLeading);
+        return true;
+    }
+
+    function scaleFontMatches(style, inheritedFont) {
+        var psKey = s2t("fontPostScriptName");
+        if (style.hasKey(psKey)) {
+            var postScriptName = style.getString(psKey);
+            if (postScriptName) return postScriptName === pendingScale.source;
         }
-        if (pendingScale.size !== 1 && scaleNumeric(style, sizeKey, pendingScale.size)) changed = true;
-        if (pendingScale.tracking !== 1 && scaleNumeric(style, trackingKey, pendingScale.tracking)) changed = true;
+        var current = styleInfo(style);
+        if (current && pendingScale.family && current.family === pendingScale.family) {
+            return !pendingScale.style || !current.style || current.style === pendingScale.style;
+        }
+        return !current && inheritedFont === pendingScale.source;
+    }
+
+    function scaleTextStyle(style, inheritedFont) {
+        if (!scaleFontMatches(style, inheritedFont)) return false;
+        var changed = false;
+        var sizeKey = s2t("size"), impliedSizeKey = s2t("impliedFontSize"), leadingKey = s2t("leading"), impliedLeadingKey = s2t("impliedLeading"), autoKey = s2t("autoLeading"), trackingKey = s2t("tracking");
+        if (pendingScale.leadingDelta !== 0 && addLeading(style, pendingScale.leadingDelta, sizeKey, impliedSizeKey, leadingKey, impliedLeadingKey, autoKey)) changed = true;
+        if (pendingScale.size !== 1) {
+            if (scaleNumeric(style, sizeKey, pendingScale.size)) changed = true;
+            if (scaleOptionalNumeric(style, impliedSizeKey, pendingScale.size)) changed = true;
+        }
+        if (pendingScale.trackingDelta !== 0 && addNumeric(style, trackingKey, pendingScale.trackingDelta, -1000, 10000)) changed = true;
         return changed;
     }
 
     function scaleLayer(layerId) {
-        var text = getTextDescriptor(layerId), changed = false, i;
+        var text = getTextDescriptor(layerId), changed = false, i, baseFont = null;
         if (text.hasKey(s2t("textStyle"))) {
             var baseStyle = text.getObjectValue(s2t("textStyle"));
-            if (scaleTextStyle(baseStyle)) { text.putObject(s2t("textStyle"), s2t("textStyle"), baseStyle); changed = true; }
+            var baseInfo = styleInfo(baseStyle);
+            baseFont = baseInfo ? baseInfo.postScriptName : null;
+            if (scaleTextStyle(baseStyle, null)) { text.putObject(s2t("textStyle"), s2t("textStyle"), baseStyle); changed = true; }
         }
         if (text.hasKey(s2t("textStyleRange"))) {
             var oldRanges = text.getList(s2t("textStyleRange")), newRanges = new ActionList(), rangesChanged = false;
@@ -315,7 +357,7 @@ var FontNavigator = (function () {
                 var range = oldRanges.getObjectValue(i);
                 if (range.hasKey(s2t("textStyle"))) {
                     var style = range.getObjectValue(s2t("textStyle"));
-                    if (scaleTextStyle(style)) { range.putObject(s2t("textStyle"), s2t("textStyle"), style); rangesChanged = true; }
+                    if (scaleTextStyle(style, baseFont)) { range.putObject(s2t("textStyle"), s2t("textStyle"), style); rangesChanged = true; }
                 }
                 newRanges.putObject(s2t("textStyleRange"), range);
             }
@@ -333,12 +375,13 @@ var FontNavigator = (function () {
         for (var i = 0; i < layers.length; i++) if (scaleLayer(layers[i].id)) pendingChanged++;
     }
 
-    function scaleTextProperties(sizeFactor, leadingFactor, trackingFactor) {
+    function scaleTextProperties(source, family, fontStyle, sizeFactor, leadingFactor, trackingFactor) {
         try {
             if (!app.documents.length) throw new Error("当前没有打开的 Photoshop 文档。");
-            pendingScale = { size: Number(sizeFactor), leading: Number(leadingFactor), tracking: Number(trackingFactor) };
-            if (!(pendingScale.size > 0 && pendingScale.size <= 100 && pendingScale.leading > 0 && pendingScale.leading <= 100 && pendingScale.tracking > 0 && pendingScale.tracking <= 100)) throw new Error("缩放倍数必须大于 0 且不超过 100。");
-            app.activeDocument.suspendHistory("批量缩放文字属性", "FontNavigator._scalePending()");
+            pendingScale = { source: String(source), family: String(family || ""), style: String(fontStyle || ""), size: Number(sizeFactor), leadingDelta: Number(leadingFactor), trackingDelta: Number(trackingFactor) };
+            if (!pendingScale.source) throw new Error("请先选择要缩放的字体。");
+            if (!(pendingScale.size > 0 && pendingScale.size <= 100 && isFinite(pendingScale.leadingDelta) && pendingScale.leadingDelta >= -10000 && pendingScale.leadingDelta <= 10000 && isFinite(pendingScale.trackingDelta) && pendingScale.trackingDelta >= -10000 && pendingScale.trackingDelta <= 10000)) throw new Error("字号倍率或行距、字距增减值超出允许范围。");
+            app.activeDocument.suspendHistory("批量调整文字属性", "FontNavigator._scalePending()");
             return success({ changedLayers: pendingChanged, skippedProperties: pendingScaleSkipped });
         } catch (error) { return failure(error); }
     }
