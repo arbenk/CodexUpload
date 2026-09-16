@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:/Users/Administrator/Desktop/Codex开发/CodexUpload/ignore测试/Codex-UsageMonitor/app.py'],
+    ['app.py'],
     pathex=[],
     binaries=[],
     datas=[],
