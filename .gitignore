@@ -1,9 +1,14 @@
 # Generated release artifacts (published through GitHub Releases)
 /dist/
+**/dist/
 
 # Generated application bundles
 **/build/
 **/package/
+**/bin/
+**/obj/
+**/portable/
+**/成品/
 
 # Python caches and environments
 **/__pycache__/
