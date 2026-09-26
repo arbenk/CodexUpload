@@ -1,0 +1,39 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: #111315;
+  color: #f4f2ed;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 720px; background: radial-gradient(circle at 80% -10%, #493a22 0, transparent 32%), #111315; }
+.shell { width: min(1120px, calc(100% - 48px)); margin: 40px auto 80px; }
+header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; }
+h1 { margin: 2px 0 8px; font-size: 36px; letter-spacing: -.03em; }
+.eyebrow { margin: 0; color: #cba66b; font-size: 12px; font-weight: 700; letter-spacing: .18em; }
+.subtitle { margin: 0; color: #aaa79f; }
+.badge { padding: 9px 14px; border: 1px solid #655235; border-radius: 999px; color: #e1bc80; background: #241f17; }
+.panel { border: 1px solid #2d3033; border-radius: 14px; background: rgba(29, 31, 33, .92); box-shadow: 0 18px 50px rgba(0,0,0,.22); }
+.controls { display: grid; grid-template-columns: 1fr 180px auto auto auto; gap: 12px; align-items: end; padding: 18px; }
+.field { display: grid; gap: 7px; }
+label { color: #aaa79f; font-size: 12px; }
+select, button { height: 42px; border: 1px solid #3a3d40; border-radius: 9px; padding: 0 14px; font: inherit; color: #f4f2ed; background: #25282a; }
+button { cursor: pointer; font-weight: 650; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.primary { border-color: #c99a52; color: #15120e; background: #d7aa64; }
+.secondary:hover { background: #303437; }
+.danger { border-color: #773d3d; background: #4d2626; }
+.summary { display: flex; gap: 24px; margin: 14px 0; padding: 13px 18px; color: #b8b5ad; font-size: 13px; }
+.image-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.image-card { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 15px; border: 1px solid #2d3033; border-radius: 12px; background: #1a1d1f; }
+.image-card input { width: 18px; height: 18px; accent-color: #d7aa64; }
+.image-title { font-weight: 700; }
+.image-meta { margin-top: 5px; color: #96938c; font-size: 12px; }
+.progress-panel { margin-top: 14px; padding: 18px; }
+.progress-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.track { height: 9px; overflow: hidden; border-radius: 99px; background: #0e0f10; }
+.bar { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #b47b35, #e2bd7c); transition: width .18s ease; }
+pre { height: 180px; overflow: auto; margin: 16px 0 0; color: #aaa79f; font: 12px/1.65 Consolas, monospace; white-space: pre-wrap; }
+.error { padding: 20px; border-color: #713c3c; color: #ffb2b2; }
+.hidden { display: none !important; }
+@media (max-width: 900px) { .controls { grid-template-columns: 1fr 1fr; } }

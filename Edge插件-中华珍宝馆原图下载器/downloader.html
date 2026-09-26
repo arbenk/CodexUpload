@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>中华珍宝馆 100% 原图下载器</title>
+  <link rel="stylesheet" href="downloader.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">EDGE EXTENSION</p>
+        <h1>100% 原图下载器</h1>
+        <p id="subtitle" class="subtitle">正在读取页面数据…</p>
+      </div>
+      <div class="badge">本地拼接</div>
+    </header>
+
+    <section id="errorPanel" class="panel error hidden"></section>
+
+    <section id="workspace" class="hidden">
+      <div class="panel controls">
+        <div class="field">
+          <label for="format">输出格式</label>
+          <select id="format">
+            <option value="png">PNG（无损，推荐）</option>
+            <option value="jpeg">JPEG（文件较小）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="concurrency">并发下载</label>
+          <select id="concurrency">
+            <option value="6">6（稳妥）</option>
+            <option value="10" selected>10（推荐）</option>
+            <option value="16">16（快速）</option>
+          </select>
+        </div>
+        <button id="selectAll" class="secondary">全选 / 取消全选</button>
+        <button id="start" class="primary">下载所选原图</button>
+        <button id="cancel" class="danger hidden">取消任务</button>
+      </div>
+
+      <div class="panel summary">
+        <span id="countText"></span>
+        <span id="sizeText"></span>
+        <span>切片：512 × 512</span>
+      </div>
+
+      <section id="imageList" class="image-list"></section>
+
+      <section class="panel progress-panel">
+        <div class="progress-row">
+          <strong id="status">等待开始</strong>
+          <span id="percent">0%</span>
+        </div>
+        <div class="track"><div id="progress" class="bar"></div></div>
+        <pre id="log"></pre>
+      </section>
+    </section>
+  </main>
+  <script src="md5.js"></script>
+  <script src="downloader.js"></script>
+</body>
+</html>
