@@ -1,0 +1,8 @@
+{
+  "component_id": "rapidocr-windows-x64-py314-v1",
+  "display_name": "本地 OCR 组件",
+  "download_url": "",
+  "sha256": "9ff6538fdedef8d081f676cb1628a88f970178c0d36566266784da6a659be64a",
+  "size_bytes": 36163819,
+  "notes": "发布 OCR 组件 ZIP 后填写下载地址、SHA-256 和文件大小，再重新打包主程序。"
+}
